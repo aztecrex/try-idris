@@ -1,6 +1,7 @@
-module DataStoreModule
+module Main
 
 import Control.ST
+import Control.ST.ImplicitCall
 
 data Access = LoggedOut | LoggedIn
 data LoginResult = OK | BadPassword
@@ -18,15 +19,22 @@ interface DataStore (m : Type -> Type) where
   logout : (store : Var) -> ST m () [tore ::: Store LoggedIn :-> Store LoggedOut]
 
 
-getData : (ConsoleIO m, DataStore m) => ST m () []
-getData = do st <- connect
+getData : (ConsoleIO m, DataStore m) =>
+          (failcount : Var)-> ST m () [failcount ::: State Integer]
+getData failcount
+        = do st <- connect
              OK <- login st
                 | BadPassword => do putStrLn "Failure"
+                                    fc <- read failcount
+                                    write failcount (fc + 1)
+                                    putStrLn ("Number of failures:" ++ show (fc + 1))
                                     disconnect st
+                                    getData failcount
              secret <- readSecret st
              putStrLn ("Secret is: " ++ show secret)
              logout st
              disconnect st
+             getData failcount
 
 implementation DataStore IO where
   Store x = State String
@@ -40,5 +48,8 @@ implementation DataStore IO where
                       else pure BadPassword
   logout store = pure ()
 
-
+main : IO ()
+main = run (do fc <- new 0
+               getData fc
+               delete fc)
 
